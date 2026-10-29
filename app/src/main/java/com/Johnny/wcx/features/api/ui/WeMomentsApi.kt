@@ -918,64 +918,11 @@ object WeMomentsApi : ApiFeature(), IResolveDex {
     /**
      * 判断 SnsInfo 是否为广告。
      * 供 RemoveMomentsAds 等模块使用，支持数据源层和 View 层双重过滤。
-     * 针对微信 8.0.79（混淆改名、双层存储、国内/国际版环境特征）深度加固：
-     * 1. 尝试无参 isAd() 方法；
-     * 2. 检查 field_adxml（WCDB 核心广告 xml 字段，非空即广告）；
-     * 3. 检查 getAdXml() 方法；
-     * 4. 检查 field_adInfo / getAdInfo() / field_atAdInfo；
-     * 5. 检查 getAdSnsInfo() 方法；
-     * 6. 检查 sourceType 广告标志位 (0x20)；
-     * 7. 检查类名本身包含广告特征 (如 AdSnsInfo 等)；
-     * 8. 对 normalizeSnsInfo 解包后的原生 SnsInfo 同样执行全套检查。
      */
     fun isAd(snsInfo: Any?): Boolean {
         if (snsInfo == null) return false
         return runCatching {
-            val targets = mutableListOf<Any>()
-            targets.add(snsInfo)
-            normalizeSnsInfo(snsInfo)?.let { if (it !== snsInfo) targets.add(it) }
-
-            for (target in targets) {
-                // 1. 原生 isAd() 无参方法
-                val isAdMethod = target.reflekt().firstMethodOrNull { name = "isAd"; parameters(); superclass() }
-                if (isAdMethod?.invoke() as? Boolean == true) return true
-
-                // 2. field_adxml 字段（WCDB 数据库字段，非空即广告）
-                val adxml = target.reflekt().firstFieldOrNull { name = "field_adxml"; superclass() }?.get() as? String
-                if (!adxml.isNullOrBlank()) return true
-
-                // 3. getAdXml() 方法
-                val adxmlMethod = target.reflekt().firstMethodOrNull { name = "getAdXml"; parameters(); superclass() }
-                val adxmlFromMethod = adxmlMethod?.invoke() as? String
-                if (!adxmlFromMethod.isNullOrBlank()) return true
-
-                // 4. field_adInfo 字段与 getAdInfo() 方法
-                val adInfo = target.reflekt().firstFieldOrNull { name = "field_adInfo"; superclass() }?.get()
-                if (adInfo != null && (adInfo !is CharSequence || adInfo.isNotBlank())) return true
-
-                val adInfoMethod = target.reflekt().firstMethodOrNull { name = "getAdInfo"; parameters(); superclass() }
-                val adInfoFromMethod = adInfoMethod?.invoke()
-                if (adInfoFromMethod != null && (adInfoFromMethod !is CharSequence || adInfoFromMethod.isNotBlank())) return true
-
-                // 5. field_atAdInfo 字段
-                val atAdInfo = target.reflekt().firstFieldOrNull { name = "field_atAdInfo"; superclass() }?.get()
-                if (atAdInfo != null && (atAdInfo !is CharSequence || atAdInfo.isNotBlank())) return true
-
-                // 6. getAdSnsInfo() 方法
-                val adSnsInfo = target.reflekt().firstMethodOrNull { name = "getAdSnsInfo"; parameters(); superclass() }?.invoke()
-                if (adSnsInfo != null) return true
-
-                // 7. field_sourceType 标志位检查 (0x20 为广告)
-                val sourceType = (target.reflekt().firstFieldOrNull { name = "field_sourceType"; superclass() }?.get() as? Number)?.toInt()
-                if (sourceType != null && (sourceType and 0x20) != 0) return true
-
-                // 8. 广告类名判定
-                val simpleName = target.javaClass.simpleName
-                if (simpleName.startsWith("AdSns", ignoreCase = true) || simpleName.contains("AdInfo", ignoreCase = true)) {
-                    return true
-                }
-            }
-            false
+            snsInfo.reflekt().firstMethodOrNull { name = "isAd"; parameters(); superclass() }?.invoke() as? Boolean == true
         }.getOrElse { false }
     }
 
@@ -2833,7 +2780,7 @@ object WeMomentsApi : ApiFeature(), IResolveDex {
         val snsId = snsInfo.reflekt().firstFieldOrNull { name = "field_snsId"; superclass() }?.get()?.let { it as? Number }?.toLong() ?: return null
         if (snsId == 0L) return null
 
-        val isAd = isAd(snsInfo)
+        val isAd = snsInfo.reflekt().firstMethodOrNull { name = "isAd"; parameters(); superclass() }?.invoke() as? Boolean == true
         snsInfoClass.reflekt().firstMethodOrNull {
             name = "getSnsId"
             parameters(bool, long)
