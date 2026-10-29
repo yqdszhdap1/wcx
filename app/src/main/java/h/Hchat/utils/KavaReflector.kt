@@ -1,15 +1,14 @@
 package h.Hchat.utils
 
-import com.highcapable.kavaref.KavaRef.Companion.resolve
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 
 /**
- * Project-local wrapper around KavaRef.
+ * Project-local reflection utility.
  *
- * Keep direct Java reflection out of feature code where possible, while still
+ * Keep direct Java reflection safe and clean across all feature code, while still
  * returning standard Method/Field/Constructor objects for Xposed and DexKit APIs.
  */
 object KavaReflector {
@@ -24,70 +23,46 @@ object KavaReflector {
     @JvmStatic
     fun declaredConstructors(clazz: Class<*>?): List<Constructor<*>> {
         if (clazz == null) return emptyList()
-        // 原生反射优先：KavaRef 的 resolve() 在模块进程内会静默返回空列表，
-        // 依赖方拿到空/ null 后会在 hook 处抛 NPE（历史故障根因）。
-        val native = runCatching {
-            clazz.declaredConstructors.map { it.also { c -> runCatching { c.isAccessible = true } } }
-        }.getOrDefault(emptyList())
-        if (native.isNotEmpty()) return native
         return runCatching {
-            clazz.resolve().optional(silent = true).constructor { }.map { it.self.accessible() }
+            clazz.declaredConstructors.map { it.also { c -> runCatching { c.isAccessible = true } } }
         }.getOrDefault(emptyList())
     }
 
     @JvmStatic
     fun declaredMethods(clazz: Class<*>?): List<Method> {
         if (clazz == null) return emptyList()
-        val native = runCatching {
-            clazz.declaredMethods.map { it.also { m -> runCatching { m.isAccessible = true } } }
-        }.getOrDefault(emptyList())
-        if (native.isNotEmpty()) return native
         return runCatching {
-            clazz.resolve().optional(silent = true).method { }.map { it.self.accessible() }
+            clazz.declaredMethods.map { it.also { m -> runCatching { m.isAccessible = true } } }
         }.getOrDefault(emptyList())
     }
 
     @JvmStatic
     fun declaredFields(clazz: Class<*>?): List<Field> {
         if (clazz == null) return emptyList()
-        val native = runCatching {
-            clazz.declaredFields.map { it.also { f -> runCatching { f.isAccessible = true } } }
-        }.getOrDefault(emptyList())
-        if (native.isNotEmpty()) return native
         return runCatching {
-            clazz.resolve().optional(silent = true).field { }.map { it.self.accessible() }
+            clazz.declaredFields.map { it.also { f -> runCatching { f.isAccessible = true } } }
         }.getOrDefault(emptyList())
     }
 
     @JvmStatic
     fun findConstructor(clazz: Class<*>?, vararg parameterTypes: Class<*>): Constructor<*>? {
         if (clazz == null) return null
-        runCatching {
+        return runCatching {
             clazz.getDeclaredConstructor(*parameterTypes).let { c ->
                 runCatching { c.isAccessible = true }
-                return c
+                c
             }
-        }
-        return runCatching {
-            clazz.resolve().optional(silent = true).firstConstructorOrNull {
-                parameters(*parameterTypes)
-            }?.self?.accessible()
         }.getOrNull()
     }
 
     @JvmStatic
     fun findDeclaredField(clazz: Class<*>?, name: String?): Field? {
         if (clazz == null || name.isNullOrEmpty()) return null
-        runCatching {
+        return runCatching {
             clazz.getDeclaredField(name).let { f ->
                 runCatching { f.isAccessible = true }
-                return f
+                f
             }
-        }
-        return runCatching {
-            clazz.resolve().optional(silent = true).firstFieldOrNull {
-                this.name = name
-            }?.self?.accessible()
         }.getOrNull()
     }
 
@@ -100,20 +75,14 @@ object KavaReflector {
                 return m
             }
         }
-        runCatching {
+        return runCatching {
             clazz.declaredMethods.firstOrNull { m ->
                 m.name == name && m.parameterTypes.size == parameterTypes.size &&
                     m.parameterTypes.indices.all { m.parameterTypes[it] == parameterTypes[it] }
             }?.let { m ->
                 runCatching { m.isAccessible = true }
-                return m
+                m
             }
-        }
-        return runCatching {
-            clazz.resolve().optional(silent = true).firstMethodOrNull {
-                this.name = name
-                parameters(*parameterTypes)
-            }?.self?.accessible()
         }.getOrNull()
     }
 

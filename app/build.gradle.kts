@@ -326,7 +326,7 @@ dependencies {
     }
     implementation("com.google.guava:guava:33.5.0-android")
     implementation("com.android.tools.smali:smali-baksmali:3.0.9")
-    implementation("com.highcapable.kavaref:kavaref-core:1.1.0")
+    // implementation("com.highcapable.kavaref:kavaref-core:1.1.0")
     implementation("com.jakewharton.android.repackaged:dalvik-dx:16.0.1")
     implementation("com.alibaba.fastjson2:fastjson2:2.0.61.android8")
     implementation("androidx.navigationevent:navigationevent:1.1.2")
@@ -338,7 +338,7 @@ dependencies {
     // 内置 Xposed API 82：Maven Central / 腾讯镜像都没有该构件，只能从 api.xposed.info 拉，
     // 而该源在 CI 上偶发超时会导致整个 master 构建失败（缓存丢失时必现）。内置后构建可复现。
     compileOnly(files("libs/xposed-api-82.jar"))
-    compileOnly(libs.libxposed.api)
+    implementation(libs.libxposed.api)
     implementation(libs.libxposed.service)
     implementation(libs.dexkit)
     implementation(libs.hiddenapibypass)
