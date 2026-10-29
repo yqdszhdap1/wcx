@@ -429,6 +429,7 @@ class MainActivity : ComponentActivity() {
                                 setClassName(hostPkg, "${PackageNames.WECHAT}.ui.LauncherUI")
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 putExtra(BuildConfig.TAG, "1")
+                                putExtra("open_wcx_settings", true)
                             })
                             isLaunchingWeChat = true
                         } catch (e: Exception) {

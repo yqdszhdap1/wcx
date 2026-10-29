@@ -12,6 +12,8 @@ import com.Johnny.wcx.ui.utils.ExtensionIcon
 @Feature(name = "模块设置", categories = ["首页右上角菜单"], description = "在首页右上角菜单添加「WCX」选项")
 object ModuleSettings : SwitchFeature(), WeHomeScreenPopupMenuApi.IMenuItemsProvider {
 
+    override val defaultEnabled: Boolean = true
+
     override fun onEnable() {
         WeHomeScreenPopupMenuApi.addProvider(this)
     }

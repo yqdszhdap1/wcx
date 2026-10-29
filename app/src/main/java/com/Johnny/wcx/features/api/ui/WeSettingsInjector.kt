@@ -365,7 +365,10 @@ object WeSettingsInjector : ApiFeature(), IResolveDex, WeChatInputBarApi.IInputB
                     try {
                         val activity = thisObject as Activity
                         val intent = activity.intent ?: return@hookBefore
-                        intent.getStringExtra(BuildConfig.TAG) ?: return@hookBefore
+                        val isWcx = intent.hasExtra(BuildConfig.TAG) ||
+                                intent.getStringExtra(BuildConfig.TAG) != null ||
+                                intent.getBooleanExtra(BuildConfig.TAG, false)
+                        if (!isWcx) return@hookBefore
                         // wait for resources & theme to init
                         Handler(Looper.getMainLooper()).postDelayed({
                             openSettingsDialog(activity)
@@ -379,8 +382,11 @@ object WeSettingsInjector : ApiFeature(), IResolveDex, WeChatInputBarApi.IInputB
                 .hookBefore {
                     try {
                         val activity = thisObject as Activity
-                        val intent = activity.intent ?: return@hookBefore
-                        intent.getStringExtra(BuildConfig.TAG) ?: return@hookBefore
+                        val intent = (args.getOrNull(0) as? Intent) ?: activity.intent ?: return@hookBefore
+                        val isWcx = intent.hasExtra(BuildConfig.TAG) ||
+                                intent.getStringExtra(BuildConfig.TAG) != null ||
+                                intent.getBooleanExtra(BuildConfig.TAG, false)
+                        if (!isWcx) return@hookBefore
                         openSettingsDialog(activity)
                     } catch (e: Throwable) {
                         WeLogger.e(TAG, "hookLauncherUi onNewIntent 异常", e)
@@ -391,16 +397,11 @@ object WeSettingsInjector : ApiFeature(), IResolveDex, WeChatInputBarApi.IInputB
 
     @Suppress("NOTHING_TO_INLINE")
     fun openSettingsDialog(context: Context) {
-        // Bug Fix (v201): 对齐上游 WeKit 的最简 Intent 启动方式。
-        // 配合 WeLauncher.init() 中 ActivityProxy.init() 注入的 IActivityManager /
-        // Instrumentation / Handler.Callback 钩子，模块 Activity 会被代理到
-        // WeChatSplashActivity 中转并最终通过 setClassName 启动真实 Activity。
-        // ActivityProxy.ActProxyMgr.isModuleProxyActivity() 通过
-        //   className.startsWith(PackageNames.MODULE)
-        // 判定模块 Activity 并走代理路由；manifest 中 SettingsActivity
-        // 已声明 exported="true"，因此经代理路由后能正常拉起。
         try {
-            context.startActivity(Intent(context, SettingsActivity::class.java))
+            val intent = Intent(context, SettingsActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
         } catch (e: Throwable) {
             WeLogger.e(TAG, "openSettingsDialog 启动失败", e)
         }
