@@ -115,15 +115,12 @@ class DexClassDelegate internal constructor(
             return false
         }
         if (results.size > 1 && !allowMultiple) {
-            if (allowFailure) {
-                WeLogger.w("DexClassDelegate", "DexKit: Multiple classes found for key: $key, count: ${results.size}, using first match")
-                setDescriptor(results[0].name)
-                return true
-            }
-            error(
-                "DexKit: Multiple classes found for key: $key, count: ${results.size}, classes: ${
-                results.joinToString(",") { it.name }
-            }")
+            WeLogger.w(
+                "DexClassDelegate",
+                "DexKit: Multiple classes found for key: $key, count: ${results.size}, fallback to first match: ${results[0].name} (classes: ${results.joinToString(",") { it.name }})"
+            )
+            setDescriptor(results[0].name)
+            return true
         }
 
         setDescriptor(results[safeIndex(results, multipleIndex, key, "class")].name)
@@ -210,16 +207,12 @@ class DexFieldDelegate internal constructor(
             return false
         }
         if (results.size > 1 && !allowMultiple) {
-            if (allowFailure) {
-                WeLogger.w("DexFieldDelegate", "DexKit: Multiple fields found for key: $key, count: ${results.size}, using first match")
-                setDescriptor(results[0].descriptor)
-                return true
-            }
-            error(
-                "DexKit: Multiple fields found for key: $key, count: ${results.size}, fields:${
-                    results.map { "${it.className}::${it.fieldName}" }
-                }"
+            WeLogger.w(
+                "DexFieldDelegate",
+                "DexKit: Multiple fields found for key: $key, count: ${results.size}, fallback to first match: ${results[0].className}::${results[0].fieldName}"
             )
+            setDescriptor(results[0].descriptor)
+            return true
         }
 
         setDescriptor(results[safeIndex(results, resultIndex, key, "field")].descriptor)
@@ -338,19 +331,13 @@ class DexMethodDelegate internal constructor(
             return false
         }
         if (results.size > 1 && !allowMultiple) {
-            if (allowFailure) {
-                WeLogger.w("DexMethodDelegate", "DexKit: Multiple methods found for key: $key, count: ${results.size}, using first match: ${results[0].className}::${results[0].methodName}")
-                val m = results[0]
-                setDescriptor(DexMethodDescriptor(m.className, m.methodName, m.methodSign))
-                return true
-            }
-            error(
-                "DexKit: Multiple methods found for key: $key, count: ${results.size}, methods:${
-                    results.map {
-                        "${it.className}::${it.methodName}"
-                    }
-                }"
+            val m = results[0]
+            WeLogger.w(
+                "DexMethodDelegate",
+                "DexKit: Multiple methods found for key: $key, count: ${results.size}, fallback to first match: ${m.className}::${m.methodName}"
             )
+            setDescriptor(DexMethodDescriptor(m.className, m.methodName, m.methodSign))
+            return true
         }
 
         val m = results[safeIndex(results, resultIndex, key, "method")]
@@ -446,13 +433,13 @@ class DexConstructorDelegate internal constructor(
             return false
         }
         if (results.size > 1 && !allowMultiple) {
-            if (!throwOnFailure) {
-                WeLogger.w("DexConstructorDelegate", "DexKit: Multiple constructors found for key: $key, count: ${results.size}, using first match")
-                val m = results[0]
-                setDescriptor(DexMethodDescriptor(m.className, "<init>", m.methodSign))
-                return true
-            }
-            error("DexKit: Multiple constructors found for key: $key, count: ${results.size}")
+            val m = results[0]
+            WeLogger.w(
+                "DexConstructorDelegate",
+                "DexKit: Multiple constructors found for key: $key, count: ${results.size}, fallback to first match: ${m.className}::<init>"
+            )
+            setDescriptor(DexMethodDescriptor(m.className, "<init>", m.methodSign))
+            return true
         }
 
         val m = results[safeIndex(results, resultIndex, key, "constructor")]
