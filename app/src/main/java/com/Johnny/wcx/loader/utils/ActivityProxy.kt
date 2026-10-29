@@ -149,6 +149,7 @@ object ActivityProxy {
 
     object ActProxyMgr {
         const val ACTIVITY_PROXY_INTENT_TOKEN = "wekit_target_intent_token"
+        const val TARGET_CLASS_EXTRA = "wekit_target_activity_class"
         const val SETTINGS_PROXY = "${PackageNames.WECHAT}.app.WeChatSplashActivity"
         const val TRANSPARENT_PROXY = "${PackageNames.WECHAT}.plugin.appbrand.ipc.AppBrandProxyTransparentUI"
 
@@ -195,6 +196,7 @@ object ActivityProxy {
                 setDataAndType(raw.data, raw.type)
                 raw.categories?.forEach { addCategory(it) }
                 putExtra(ActProxyMgr.ACTIVITY_PROXY_INTENT_TOKEN, token)
+                putExtra(ActProxyMgr.TARGET_CLASS_EXTRA, className)
                 setExtrasClassLoader(ParcelableFixer.hybridClassLoader)
             }.also {
                 WeLogger.i(
@@ -223,7 +225,7 @@ object ActivityProxy {
             if (!wrapper.hasExtra(ActProxyMgr.ACTIVITY_PROXY_INTENT_TOKEN)) return null
 
             val token = wrapper.getStringExtra(ActProxyMgr.ACTIVITY_PROXY_INTENT_TOKEN)
-            val real = IntentTokenCache.getAndRemove(token) ?: run {
+            val real = IntentTokenCache.get(token) ?: run {
                 WeLogger.w(TAG, "token expired or lost in handler: $token")
                 return null
             }
@@ -270,7 +272,7 @@ object ActivityProxy {
             val cl = ParcelableFixer.hybridClassLoader
             intent.setExtrasClassLoader(cl)
             val token = intent.getStringExtra(ActProxyMgr.ACTIVITY_PROXY_INTENT_TOKEN)
-            return IntentTokenCache.getAndRemove(token)?.also { real ->
+            return (IntentTokenCache.get(token) ?: IntentTokenCache.getAndRemove(token))?.also { real ->
                 real.setExtrasClassLoader(cl)
                 real.extras?.classLoader = cl
             }
@@ -279,18 +281,35 @@ object ActivityProxy {
         override fun newActivity(cl: ClassLoader, className: String, intent: Intent): Activity {
             var resolvedIntent = intent
             var resolvedClass = className
-            tryRecoverIntent(intent)?.takeIf { it.component != null }?.let {
-                resolvedIntent = it
-                resolvedClass = it.component!!.className
+
+            val targetFromExtra = runCatching {
+                intent.setExtrasClassLoader(ParcelableFixer.hybridClassLoader)
+                intent.getStringExtra(ActProxyMgr.TARGET_CLASS_EXTRA)
+            }.getOrNull()
+
+            if (!targetFromExtra.isNullOrEmpty() && ActProxyMgr.isModuleProxyActivity(targetFromExtra)) {
+                resolvedClass = targetFromExtra
+                val token = runCatching { intent.getStringExtra(ActProxyMgr.ACTIVITY_PROXY_INTENT_TOKEN) }.getOrNull()
+                IntentTokenCache.get(token)?.let { resolvedIntent = it }
                 WeLogger.i(
                     "ProxyInstrumentation",
-                    "recovered intent in newActivity: $resolvedClass"
+                    "resolved from TARGET_CLASS_EXTRA in newActivity: $resolvedClass"
                 )
+            } else {
+                tryRecoverIntent(intent)?.takeIf { it.component != null }?.let {
+                    resolvedIntent = it
+                    resolvedClass = it.component!!.className
+                    WeLogger.i(
+                        "ProxyInstrumentation",
+                        "recovered intent in newActivity: $resolvedClass"
+                    )
+                }
             }
+
             // ProxyHandlerCallback 已经把 LaunchActivityItem 的 Intent 换回原始 Intent，
             // token 同时被消费掉，上面取不到；此时改从 Intent 的 component 判定目标模块 Activity。
             if (!ActProxyMgr.isModuleProxyActivity(resolvedClass)) {
-                val component = intent.component
+                val component = resolvedIntent.component ?: intent.component
                 if (component != null && ActProxyMgr.isModuleProxyActivity(component.className)) {
                     resolvedClass = component.className
                     resolvedIntent = intent
@@ -322,8 +341,17 @@ object ActivityProxy {
             parent: Activity?,
             id: String?,
             lastNonConfigurationInstance: Any?
-        ): Activity =
-            base.newActivity(
+        ): Activity {
+            val targetFromExtra = runCatching {
+                intent.setExtrasClassLoader(ParcelableFixer.hybridClassLoader)
+                intent.getStringExtra(ActProxyMgr.TARGET_CLASS_EXTRA)
+            }.getOrNull()
+            if (!targetFromExtra.isNullOrEmpty() && ActProxyMgr.isModuleProxyActivity(targetFromExtra)) {
+                WeLogger.i("ProxyInstrumentation", "10-arg newActivity redirected: ${clazz.name} -> $targetFromExtra")
+                return ClassLoaders.MODULE.loadClass(targetFromExtra)
+                    .getDeclaredConstructor().newInstance() as Activity
+            }
+            return base.newActivity(
                 clazz,
                 context,
                 token,
@@ -335,6 +363,7 @@ object ActivityProxy {
                 id,
                 lastNonConfigurationInstance
             )
+        }
 
         override fun callActivityOnCreate(activity: Activity, icicle: Bundle?) {
             WeLogger.i(
@@ -545,6 +574,12 @@ object ActivityProxy {
         fun put(intent: Intent): String {
             cleanup()
             return UUID.randomUUID().toString().also { cache[it] = Entry(intent) }
+        }
+
+        fun get(token: String?): Intent? {
+            token ?: return null
+            val entry = cache[token] ?: return null
+            return entry.intent.takeIf { System.currentTimeMillis() - entry.timestamp <= EXPIRE_MS }
         }
 
         fun getAndRemove(token: String?): Intent? {
