@@ -2,6 +2,8 @@
 # These MUST be kept with original names — Xposed framework loads them
 -keep class de.robv.android.xposed.** { *; }
 -keep class io.github.libxposed.** { *; }
+-dontwarn io.github.libxposed.**
+-keep class com.Johnny.wcx.loader.entry.** { *; }
 -keep class com.Johnny.wcx.entry.** { *; }
 -keep class com.Johnny.wcx.application.** { *; }
 
